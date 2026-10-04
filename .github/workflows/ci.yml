@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  go:
-    name: Go (vet + test)
+  build:
+    name: Build (Go + frontend)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,10 +20,19 @@ jobs:
         with:
           go-version: "1.27"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install Linux build deps (GTK3 / WebKit2GTK-4.1)
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails CLI (gtk3)
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.27
 
       - name: gofmt
         run: |
@@ -32,8 +41,8 @@ jobs:
             echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
           fi
 
-      # main.go embeds frontend/dist; a committed placeholder is not enough
-      # because vite cleans it, so create one before compiling.
+      # main.go embeds frontend/dist; vite cleans any committed placeholder, so
+      # create one before compiling. `wails3 build` below produces the real one.
       - name: Placeholder frontend/dist
         run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
 
@@ -43,26 +52,13 @@ jobs:
       - name: test
         run: go test -tags gtk3 ./...
 
-  frontend:
-    name: Frontend (typecheck + build)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      # Generates the Wails bindings (required by the vite plugin), builds the
+      # frontend and compiles the Linux binary.
+      - name: Build
+        run: wails3 build
 
-      - uses: actions/setup-node@v4
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: install
-        working-directory: frontend
-        run: npm ci
-
-      - name: typecheck
-        working-directory: frontend
-        run: npx tsc --noEmit
-
-      - name: build
-        working-directory: frontend
-        run: npm run build
+          name: wami-auto-fisher-linux
+          path: bin/wami-auto-fisher
+          if-no-files-found: error
