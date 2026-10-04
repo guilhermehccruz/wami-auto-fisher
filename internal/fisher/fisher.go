@@ -4,6 +4,7 @@
 package fisher
 
 import (
+	"fmt"
 	"image"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ type Config struct {
 	Margin         float64 `json:"margin"`
 	RefractoryMs   int     `json:"refractoryMs"`
 	RetryMs        int     `json:"retryMs"`
+	IdleTimeoutMs  int     `json:"idleTimeoutMs"` // stop after this long with no prompt (0 = never)
 }
 
 func DefaultConfig() Config {
@@ -45,6 +47,7 @@ func DefaultConfig() Config {
 		Margin:         1.25,
 		RefractoryMs:   100,
 		RetryMs:        250,
+		IdleTimeoutMs:  10000,
 	}
 }
 
@@ -188,7 +191,7 @@ func (r *Runner) Start() {
 		return
 	}
 	r.running = true
-	r.status = Status{Running: true}
+	r.status = Status{Running: true, Best: -1}
 	r.stop = make(chan struct{})
 	stop := r.stop
 	spots := append([]Spot(nil), r.spots...)
@@ -234,6 +237,8 @@ func (r *Runner) loop(stop chan struct{}, spots []Spot, cfg Config) {
 	next := start
 	presses := 0
 	lastKey := ""
+	lastSeen := start
+	idleTimeout := time.Duration(cfg.IdleTimeoutMs) * time.Millisecond
 
 	for {
 		select {
@@ -241,6 +246,10 @@ func (r *Runner) loop(stop chan struct{}, spots []Spot, cfg Config) {
 			r.finish()
 			return
 		default:
+		}
+		if idleTimeout > 0 && time.Since(lastSeen) >= idleTimeout {
+			r.stopWith(fmt.Sprintf("stopped: no prompt detected for %s", idleTimeout))
+			return
 		}
 		next = next.Add(interval)
 		if d := time.Until(next); d > 0 {
@@ -262,7 +271,12 @@ func (r *Runner) loop(stop chan struct{}, spots []Spot, cfg Config) {
 		}
 		scores := ScoreAll(frame, spots)
 		idx, ok, ambiguous := Best(scores, cfg.WhiteThreshold, cfg.Margin)
+		bestIdx := idx
+		if !ok {
+			bestIdx = -1
+		}
 		if ok {
+			lastSeen = time.Now()
 			s := scores[idx].Spot
 			now := time.Now()
 			switch {
@@ -292,7 +306,7 @@ func (r *Runner) loop(stop chan struct{}, spots []Spot, cfg Config) {
 		}
 		r.patch(func(st *Status) {
 			st.Spots = scores
-			st.Best = idx
+			st.Best = bestIdx
 			st.Ambiguous = ambiguous
 			st.Presses = presses
 			st.LastKey = lastKey
@@ -312,6 +326,18 @@ func (r *Runner) finish() {
 	r.mu.Lock()
 	r.running = false
 	r.status.Running = false
+	r.status.Best = -1
+	r.mu.Unlock()
+	r.emit()
+}
+
+// stopWith ends the run and reports a reason (e.g. the idle timeout).
+func (r *Runner) stopWith(msg string) {
+	r.mu.Lock()
+	r.running = false
+	r.status.Running = false
+	r.status.Best = -1
+	r.status.Error = msg
 	r.mu.Unlock()
 	r.emit()
 }

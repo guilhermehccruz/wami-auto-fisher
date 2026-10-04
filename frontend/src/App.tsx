@@ -21,6 +21,7 @@ type Config = {
   margin: number;
   refractoryMs: number;
   retryMs: number;
+  idleTimeoutMs: number;
 };
 type Display = { index: number; x: number; y: number; w: number; h: number; primary: boolean };
 type Diagnostics = {
@@ -28,6 +29,7 @@ type Diagnostics = {
   activeTitle: string;
   displays: Display[] | null;
   configPath: string;
+  platform: string;
   error?: string;
 };
 
@@ -228,17 +230,29 @@ export default function App() {
                   onChange={(e) => saveCfg({ ...cfg, margin: Number(e.target.value) })}
                 />
               </label>
+              <label>
+                stop if idle (s)
+                <input
+                  type="number"
+                  value={cfg.idleTimeoutMs / 1000}
+                  onChange={(e) => saveCfg({ ...cfg, idleTimeoutMs: Number(e.target.value) * 1000 })}
+                />
+              </label>
             </div>
           )}
 
-          <h2>Setup</h2>
-          <button onClick={setupKwin} disabled={busy}>
-            Authorize fast KWin capture (KDE Wayland)
-          </button>
-          <p className="hint">
-            Fast region capture on KDE requires this once per binary path. Without it the app falls
-            back to the slow portal.
-          </p>
+          {diag?.platform === "linux" && (
+            <>
+              <h2>Setup</h2>
+              <button onClick={setupKwin} disabled={busy}>
+                Authorize fast KWin capture (KDE Wayland)
+              </button>
+              <p className="hint">
+                Fast region capture on KDE requires this once per binary path. Without it the app
+                falls back to the slow portal.
+              </p>
+            </>
+          )}
         </section>
       </div>
     </div>

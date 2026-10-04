@@ -18,10 +18,10 @@ marked **[unproven]** need a short spike on the real game before implementation
 **Self-contained by design.** This document is the full specification for this app and
 does not depend on any other document or repository. The platform notes in
 [Appendix B](#appendix-b--platform-notes-worth-not-rediscovering) are hard-won,
-silent-failure knowledge and are carried here in full so they are not lost. The input
-`Driver`, global-hotkey sources, atomic JSON storage, single-instance lock, logging and
-Wails shell are all part of this project's own codebase. The default action is a
-keyboard key, which needs no pointer at all.
+silent-failure knowledge and are carried here in full so they are not lost. The capture
+and input backends, atomic JSON storage, single-instance lock, logging and Wails shell
+are part of this project's own codebase. The action is a keyboard key; the app has no
+global hotkeys and no pointer interaction.
 
 ---
 
@@ -305,9 +305,11 @@ the risk; *detection correctness* is. `pollMs` and the thresholds are profile fi
 the user can trade CPU for latency.
 
 ### 6.4 Modes
-- **Until stopped** (default): run forever, watch prompts.
-- **Max runtime**: profile-level `failsafe.maxRuntimeSec` (default 3600,
-  `0` = unlimited), measured on active time, auto-stopping with a notice.
+- **Until stopped** (default): run until Stop is pressed.
+- **Idle auto-stop**: if no prompt is detected (confidently) for `idleTimeoutMs`
+  (default **10 s**, `0` = disabled), the run stops itself and reports why. This keeps a
+  forgotten run from tapping into whatever is on screen.
+- **Max runtime** (later): optional cap measured on active time.
 
 ---
 
@@ -482,11 +484,10 @@ The game is the **foreground window for the whole run**, so the app's window is 
 behind it (or minimized) and the mouse must stay free for the user. That fixes the
 control model:
 
-- **Global hotkeys are the only control surface during a run** — `F8` Start/Stop,
-  `F9` Pause/Resume, `Ctrl+Shift+F12` Panic. They must work while the game has focus
-  (the portal / `XGrabKey` / `RegisterHotKey` layer).
-- The **app window is for setup**: set thresholds, press Start. The user configures,
-  presses `F8`, then clicks into the game.
+- **The app has no global hotkeys.** Control is the on-screen **Start** and **Stop**
+  buttons only. To stop during a run, Alt-Tab to the app and click Stop; the idle
+  auto-stop ([§6.4](#64-modes)) is the safety net if you forget.
+- The **app window is for setup**: set thresholds, press Start.
 - A full UI is not needed over the game. If live reassurance is wanted, a tiny
   always-on-top **status strip** (current detected spot, press count, `F8` to stop) is a
   Phase 2 option; it is not required for v1.
@@ -500,23 +501,18 @@ control model:
 
 | Mechanism | Behavior | Phase |
 |---|---|---|
-| Panic hotkey (`Ctrl+Shift+F12`) | abort immediately, release held input | v1 |
-| Stop (`F8`) | stop before the next injection | v1 |
-| Start (`F8` while idle) | begin watching | v1 |
-| Max runtime | profile `failsafe.maxRuntimeSec`, active-time based | v1 |
+| **Stop button** | stop before the next injection | v1 |
+| **Start button** | begin watching | v1 |
+| **Idle auto-stop** | stop after `idleTimeoutMs` (default 10 s) with no prompt | v1 |
 | Single-instance lock | second launch refuses to run | v1 |
 | **Ambiguity guard** | ignore a poll when two ROIs are close in score | v1 |
-| **Ambiguity/no-blind-press policy** | never press without a confident detection | v1 |
+| **No-blind-press policy** | never press without a confident detection | v1 |
 | Capture-failure abort | all-black game region → stop with a banner, not blind presses | v1 |
-| UI locked while running | only Stop/Panic live; the game is foreground anyway | v1 |
-| `ReleaseAll()` on exit | no held key on any exit path | v1 |
-| Hotkey-failure warning | visible startup warning when no global source registered | v1 |
+| UI locked while running | only Stop is live; the game is foreground anyway | v1 |
 
-The global hotkey layer (`RegisterHotKey` / `XGrabKey` / `GlobalShortcuts` portal) has
-several silent-failure traps, all listed in
-[Appendix B](#appendix-b--platform-notes-worth-not-rediscovering). Because
-the game is focused during a run, hotkeys must be global; this is a hard requirement,
-not a nicety.
+There are **no global hotkeys** in this app. Stop is the Stop button (Alt-Tab to the
+app); the idle auto-stop is the fallback if a run is left unattended. Because the input
+is only ever a key tap, there is nothing to release beyond the current tap.
 
 ---
 
@@ -524,7 +520,7 @@ not a nicety.
 
 ```
 go.mod                       module wami-auto-fisher
-main.go                      Wails bootstrap; single-instance lock; hotkey registration;
+main.go                      Wails bootstrap; single-instance lock (later);
                              service bindings; startup/shutdown
 build/                       Wails config + appicon
 internal/fisher/             classifier + Capture/Input interfaces + detect loop:
@@ -629,7 +625,7 @@ The original six questions:
 
 ### Phase 1 — MVP
 Fixed coordinates (no calibration); `brightBox` classifier; key action; poll loop with
-armed/retry; Start/Stop + global hotkeys; max runtime; single-instance lock;
+armed/retry; Start/Stop buttons; idle auto-stop; single-instance lock (later);
 capture-failure abort; telemetry; diagnostics; Wails shell; Linux + Windows builds.
 
 **Status (in progress).** A first end-to-end shell exists:
@@ -640,8 +636,8 @@ capture-failure abort; telemetry; diagnostics; Wails shell; Linux + Windows buil
 | Linux capture — KWin ScreenShot2 (fast) + portal fallback; XTEST input | ✅ done, validated |
 | Windows capture — kbinani GDI + robotgo/win SendInput | ✅ compiles; runtime test pending |
 | Wails app (`main.go`, `service.go`) + React UI | ✅ builds (`wails3 build`, `-tags gtk3`), runs on Linux |
-| UI: fixed read-only spot list, live white/blue, Start/Stop, thresholds, KWin authorize | ✅ first cut, no calibration |
-| Global hotkeys, max runtime, single-instance lock, pause/panic | ⏳ next |
+| UI: fixed read-only spot list, live white/blue, Start/Stop, thresholds, idle auto-stop, Linux-only KWin setup | ✅ done |
+| Single-instance lock | ⏳ next |
 
 Build: `wails3 build` (the Linux task defaults to `EXTRA_TAGS=gtk3`), producing
 `bin/wami-auto-fisher`. Windows cross-build: `wails3 build GOOS=windows`.
