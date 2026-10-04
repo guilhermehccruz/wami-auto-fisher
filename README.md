@@ -78,6 +78,10 @@ app and saved to `~/.config/wami-auto-fisher/config.json` (Linux) or
 - No global hotkeys: stopping is the on-screen **Stop** button (or the idle
   auto-stop).
 - Single-instance: launching the app again brings the running window forward.
+- Linux: on startup the app registers a menu entry (with its icon) under
+  `~/.local/share` pointing at the **current** executable path. It is not a
+  system install — move/rename the binary and the entry updates on the next
+  run; delete it and the entry goes stale.
 - Only one instance should drive input at a time.
 - This is for a single-player idle game. Automating online games may violate
   their rules; you assume the risk.
