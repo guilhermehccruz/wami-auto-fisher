@@ -1,0 +1,12 @@
+# Go build output
+/phase0
+/phase0.exe
+/wami-spike
+/bin/
+
+# spike captures (desktop screenshots)
+/spike/phase0/out/
+
+# Node / frontend (Phase 1)
+node_modules/
+frontend/dist/
