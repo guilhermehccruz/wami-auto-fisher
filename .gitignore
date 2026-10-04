@@ -2,11 +2,17 @@
 /phase0
 /phase0.exe
 /wami-spike
+/wami-auto-fisher
 /bin/
 
 # spike captures (desktop screenshots)
 /spike/phase0/out/
 
-# Node / frontend (Phase 1)
+# Node / frontend
 node_modules/
-frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/bindings/
+
+# Wails/Task runner cache
+.task/

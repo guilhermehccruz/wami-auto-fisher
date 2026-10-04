@@ -646,28 +646,57 @@ frame.
 
 ## 14. Phases
 
-### Phase 0 — blocking spike **[unproven]**
-Answer the questions that could change the design, on the real game, both OSes:
-1. **Capture the Proton window.** Does `kbinani/screenshot` capture the WAMI window
-   (a) on Windows borderless, (b) on Linux under a Wayland session via XWayland? Record
-   whether exclusive fullscreen is black (expected).
-2. **Key injection reaches the Proton game.** Does an XTEST/`libei` key tap reach the
-   Proton window on Linux, and `SendInput` on Windows, with the game focused?
-3. **Detection reliability.** With `brightBox` at sane thresholds, does a prompt at each
-   of the 4 spots classify cleanly, with all spots clear between prompts? Capture sample
-   frames of all four prompts to seed golden tests.
-4. **Timing.** Measure prompt-visible → key-landed latency; confirm < ~60 ms.
-5. **Window locate.** Confirm the WAMI window title (exact) and that its client rect is
-   readable on both OSes; confirm ROI scaling when the window is resized.
-6. **Spot ⇒ key mapping.** Confirm which spot carries `W`, `A`, `S`, `D` and that it
-   does not rotate. If the same key can appear at a different spot, position-only
-   detection is wrong and the prompt text (or a per-key template) must be read.
+### Phase 0 — blocking spike
+Answer the questions that could change the design, on the real game, both OSes.
+A runnable harness lives at `spike/phase0/` (see its README).
+
+**Results (Kubuntu/Plasma Wayland, Steam/Proton, 2026-10-04):**
+
+1. **Capture the Proton window** — ✅ Linux: KWin `ScreenShot2` region capture (~2 ms/spot
+   union, ~43 ms full monitor) with the portal (~2 fps) as fallback; kbinani's
+   `XGetImage` path is all-black on a Wayland session. ⏳ Windows (GDI) pending the
+   Windows pass.
+2. **Key injection reaches the game** — ✅ Linux: `robotgo/x11` XTEST taps land in the
+   Proton game. ⏳ Windows pending.
+3. **Detection reliability** — ✅ Linux: the user confirmed a full run works; the
+   `white/blue` classifier reads the correct spot. Golden frames captured separately.
+4. **Timing** — ✅ capture is ~2 ms/region and injection sub-millisecond; latency is
+   dominated by the poll period (10–20 fps is comfortable).
+5. **Window locate** — ✅ Linux: the WAMI window is reachable via XWayland/Xinerama; the
+   game sat at global `(1920,0)` `1861x985`. Window-client ROI scaling is still to wire.
+6. **Spot ⇒ key mapping** — ✅ the four spots are fixed and position identifies the key;
+   the user calibrated exact boxes with `kdotool` and detection matched.
+
+The original six questions:
+1. **Capture the Proton window.** Does the capture backend read the WAMI window on
+   Windows (borderless) and on Linux (KDE Wayland / X11)? Record whether exclusive
+   fullscreen is black (expected).
+2. **Key injection reaches the Proton game.** XTEST/`libei` on Linux, `SendInput` on
+   Windows.
+3. **Detection reliability.** Each spot classifies cleanly with the others clear.
+4. **Timing.** Prompt-visible → key-landed latency.
+5. **Window locate.** Exact title and readable client rect on both OSes.
+6. **Spot ⇒ key mapping.** Which spot carries `W`, `A`, `S`, `D`, and does it rotate?
 
 ### Phase 1 — MVP
 Profiles CRUD + calibration wizard + Test/debug view; 4 spots; `brightBox` classifier;
 key action with click fallback; poll loop with armed/retry; Start/Stop/Panic + global
 hotkeys; max runtime; single-instance lock; capture-failure abort; telemetry;
 diagnostics; Wails shell; Linux + Windows builds.
+
+**Status (in progress).** A first end-to-end shell exists:
+
+| Area | State |
+|---|---|
+| `internal/fisher` — classifier, capture/input interfaces, detect loop | ✅ done, builds Linux + Windows |
+| Linux capture — KWin ScreenShot2 (fast) + portal fallback; XTEST input | ✅ done, validated |
+| Windows capture — kbinani GDI + robotgo/win SendInput | ✅ compiles; runtime test pending |
+| Wails app (`main.go`, `service.go`) + React UI | ✅ builds (`wails3 build`, `-tags gtk3`), runs on Linux |
+| UI: spot table (editable ROI/key), live white/blue, Start/Stop, threshold, KWin authorize, capture preview overlay | ✅ first cut |
+| Global hotkeys, profiles, calibration wizard, max runtime, single-instance, telemetry events | ⏳ next |
+
+Build: `wails3 build` (the Linux task defaults to `EXTRA_TAGS=gtk3`), producing
+`bin/wami-auto-fisher`. Windows cross-build: `wails3 build GOOS=windows`.
 
 ### Phase 2 — polish
 Template mode; auto-start (detect and click the `START` button after endurance
