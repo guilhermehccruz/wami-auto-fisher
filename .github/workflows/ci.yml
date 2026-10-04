@@ -32,6 +32,11 @@ jobs:
             echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
           fi
 
+      # main.go embeds frontend/dist; a committed placeholder is not enough
+      # because vite cleans it, so create one before compiling.
+      - name: Placeholder frontend/dist
+        run: mkdir -p frontend/dist && touch frontend/dist/.gitkeep
+
       - name: vet
         run: go vet -tags gtk3 ./...
 
