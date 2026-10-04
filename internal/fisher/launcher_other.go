@@ -9,8 +9,3 @@ import "errors"
 func WriteLauncher(icon []byte) (string, error) {
 	return "", errors.New("launcher install is Linux-only")
 }
-
-// SetupKWin is a no-op outside KDE/Linux.
-func SetupKWin(icon []byte) (string, error) {
-	return "", errors.New("KWin authorization is Linux-only")
-}

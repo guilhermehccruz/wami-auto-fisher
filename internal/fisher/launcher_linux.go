@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const launcherName = "wami-auto-fisher"
@@ -68,17 +67,6 @@ X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 
 	refreshCaches(appDir)
 	return desktopPath, nil
-}
-
-// SetupKWin installs the launcher entry (which authorizes KWin ScreenShot2) and
-// rebuilds the KDE service cache.
-func SetupKWin(icon []byte) (string, error) {
-	path, err := WriteLauncher(icon)
-	if err != nil {
-		return "", err
-	}
-	time.Sleep(1500 * time.Millisecond)
-	return path, nil
 }
 
 func refreshCaches(appDir string) {

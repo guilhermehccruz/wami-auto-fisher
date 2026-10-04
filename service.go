@@ -180,23 +180,3 @@ func (s *Service) Diagnostics() Diagnostics {
 	}
 	return d
 }
-
-// SetupKWin authorizes this binary for fast KWin ScreenShot2 capture (Linux KDE).
-func (s *Service) SetupKWin() (string, error) {
-	path, err := fisher.SetupKWin(appIconPNG)
-	if err != nil {
-		return "", err
-	}
-	if screen, err := fisher.OpenScreen(-1); err == nil {
-		s.mu.Lock()
-		s.screen = screen
-		s.screenErr = ""
-		s.runner = fisher.NewRunner(screen, screen, fixedSpots(), s.cfg, func(st fisher.Status) {
-			if s.app != nil {
-				s.app.Event.Emit("status", st)
-			}
-		})
-		s.mu.Unlock()
-	}
-	return path, nil
-}

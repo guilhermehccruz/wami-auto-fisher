@@ -93,19 +93,6 @@ export default function App() {
   };
   const stop = () => call("Stop");
 
-  const setupKwin = async () => {
-    setBusy(true);
-    try {
-      const path = await call<string>("SetupKWin");
-      setNote(`Authorized KWin capture via ${path}`);
-      await reload();
-    } catch (e) {
-      setNote(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const scoreFor = (id: string): Metrics | undefined => status.spots?.find((m) => m.spot.id === id);
   const backendDown = !!diag?.error;
 
@@ -240,19 +227,6 @@ export default function App() {
                 />
               </label>
             </div>
-          )}
-
-          {diag?.platform === "linux" && (
-            <>
-              <h2>Setup</h2>
-              <button onClick={setupKwin} disabled={busy}>
-                Authorize fast KWin capture (KDE Wayland)
-              </button>
-              <p className="hint">
-                Fast region capture on KDE requires this once per binary path. Without it the app
-                falls back to the slow portal.
-              </p>
-            </>
           )}
         </section>
       </div>
