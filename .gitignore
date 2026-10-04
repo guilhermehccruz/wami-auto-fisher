@@ -16,9 +16,8 @@ frontend/bindings/
 
 # Wails generated build assets
 build/linux/*.desktop
-build/darwin/icons.icns
 build/windows/*.syso
+build/darwin/
 
 # Wails/Task runner cache
 .task/
-build/windows/icon.ico

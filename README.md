@@ -30,6 +30,10 @@ wails3 build GOOS=windows    # Windows -> bin/wami-auto-fisher.exe
 `wails3 build` compiles the frontend, generates bindings and embeds the assets.
 Run tests with `go test -tags gtk3 ./...`.
 
+Only **Windows and Linux** are targeted (the Wails Android/iOS/macOS scaffold was
+removed). The Windows icon is committed; after changing `build/appicon.png`,
+regenerate it with `wails3 task common:generate:icons`.
+
 ## Run
 
 ```sh
