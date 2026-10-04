@@ -5,12 +5,12 @@ version: '3'
 
 # This information is used to generate the build assets.
 info:
-  companyName: "WAMI" # The name of the company
+  companyName: "WAMI Auto Fisher" # The name of the company
   productName: "WAMI Auto Fisher" # The name of the application
   productIdentifier: "io.github.wamiautofisher.WamiAutoFisher" # The unique product identifier
   description: "Automates the WAMI active fishing minigame" # The application description
-  copyright: "(c) 2026, WAMI Auto Fisher" # Copyright text
-  comments: "Design doc: DESIGN.md" # Comments
+  copyright: "© 2026, WAMI Auto Fisher" # Copyright text
+  comments: "WAMI Auto Fisher" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension

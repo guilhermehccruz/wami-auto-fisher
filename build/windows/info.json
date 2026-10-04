@@ -5,11 +5,11 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A wamiscaffold application",
-			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"CompanyName": "WAMI Auto Fisher",
+			"FileDescription": "WAMI Auto Fisher",
+			"LegalCopyright": "© 2026, WAMI Auto Fisher",
+			"ProductName": "WAMI Auto Fisher",
+			"Comments": "Automates the WAMI active fishing minigame"
 		}
 	}
 }
