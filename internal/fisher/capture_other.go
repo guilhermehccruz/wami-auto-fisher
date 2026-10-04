@@ -23,7 +23,6 @@ func (s *Screen) ActiveTitle() string                         { return "" }
 func (s *Screen) CursorPos() (int, int)                       { return 0, 0 }
 func (s *Screen) DisplayCount() int                           { return 0 }
 func (s *Screen) Displays() []Display                         { return nil }
-func SetupKWin() (string, error)                              { return "", errUnsupported }
 
 // Display describes one monitor.
 type Display struct {

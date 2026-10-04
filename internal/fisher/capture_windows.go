@@ -127,6 +127,3 @@ func crop(src *image.RGBA, r image.Rectangle) *image.RGBA {
 	draw.Draw(dst, dst.Bounds(), src, r.Min, draw.Src)
 	return dst
 }
-
-// SetupKWin is a no-op outside KDE.
-func SetupKWin() (string, error) { return "", errors.New("KWin authorization is Linux-only") }

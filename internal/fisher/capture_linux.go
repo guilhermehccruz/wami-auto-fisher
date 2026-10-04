@@ -10,9 +10,6 @@ import (
 	"image/draw"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"time"
 
 	x11 "github.com/go-vgo/robotgo/x11"
 	"github.com/godbus/dbus/v5"
@@ -278,51 +275,4 @@ func (k *kwinCapture) capture(x, y int, w, h uint32) (*image.RGBA, map[string]db
 		}
 	}
 	return img, results, nil
-}
-
-// SetupKWin writes the .desktop that authorizes this binary for KWin
-// ScreenShot2 and rebuilds the KDE service cache. Must be run from the installed
-// binary path, not `go run`.
-func SetupKWin() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	exe, _ = filepath.EvalSymlinks(exe)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".local", "share", "applications")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, "wami-auto-fisher.desktop")
-	content := fmt.Sprintf(`[Desktop Entry]
-Type=Application
-Name=WAMI Auto Fisher
-Comment=Authorizes KWin ScreenShot2 for fast capture
-Exec=%s
-X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
-`, exe)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return "", err
-	}
-	if cacheDir, err := os.UserCacheDir(); err == nil {
-		if matches, _ := filepath.Glob(filepath.Join(cacheDir, "ksycoca6*")); len(matches) > 0 {
-			for _, m := range matches {
-				_ = os.Remove(m)
-			}
-		}
-	}
-	for _, tool := range []string{"kbuildsycoca6", "kbuildsycoca5"} {
-		if _, err := exec.LookPath(tool); err == nil {
-			cmd := exec.Command(tool, "--noincremental")
-			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-			_ = cmd.Run()
-			break
-		}
-	}
-	time.Sleep(1500 * time.Millisecond)
-	return path, nil
 }

@@ -43,11 +43,11 @@ Run tests with `go test -tags gtk3 ./...`.
 
 ### KDE fast capture (Linux only)
 
-On KDE Wayland the app can capture a small region at high speed via KWin. It
-needs a one-time authorization per binary path: click
-**"Authorize fast KWin capture"** in the app. Without it the app falls back to
-the desktop portal, which is much slower (~2 fps). The section is hidden on
-Windows.
+On KDE Wayland the app captures a small region at high speed via KWin. On
+startup it installs a launcher entry and icon under `~/.local/share` whose
+`.desktop` also carries the KWin authorization (and focuses/updates itself each
+run). If the app still falls back to the slow desktop portal (~2 fps), click
+**"Authorize fast KWin capture"** in the app. The section is hidden on Windows.
 
 ## Fixed coordinates
 

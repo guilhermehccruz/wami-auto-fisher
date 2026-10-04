@@ -727,9 +727,11 @@ Validated platform notes, carried here in full because every one causes a **sile
    CaptureArea(x,y,w,h, options, pipe:fd)` captures a region in ~2 ms for a spot union
    and ~43 ms full monitor, writing the raw image into the pipe you pass. Authorization
    is resolved from `/proc/<pid>/exe` against a `.desktop` whose `Exec` matches and which
-   carries `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`. A changed `Exec`
-   is not picked up from a stale KDE service cache: clear `ksycoca6*` and run
-   `kbuildsycoca6 --noincremental` (the app's `setup-kwin` does this).
+   carries `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`. The app installs
+   such a `.desktop` (plus its icon, under `~/.local/share`) on startup and from the
+   "Authorize fast KWin capture" button; a changed `Exec` is not picked up from a stale
+   KDE service cache, so it clears `ksycoca6*` and runs
+   `kbuildsycoca6 --noincremental`.
 2. Windows GDI cannot read an **exclusive-fullscreen** DirectX/Vulkan surface. Borderless
    windowed is mandatory for capture. The debug view's all-black detection is the
    user-facing explanation.

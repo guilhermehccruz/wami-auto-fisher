@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,6 +13,12 @@ import (
 
 	"wami-auto-fisher/internal/fisher"
 )
+
+// appIconPNG is embedded so the app can install its own launcher icon without
+// shipping the asset alongside the binary.
+//
+//go:embed build/appicon.png
+var appIconPNG []byte
 
 // Service is the Go surface bound to the frontend.
 type Service struct {
@@ -93,6 +100,9 @@ func (s *Service) Startup() error {
 			}
 		})
 	}
+	// Keep the desktop launcher entry (and its icon) current. On Linux this also
+	// authorizes KWin ScreenShot2; elsewhere it is a no-op.
+	_, _ = fisher.WriteLauncher(appIconPNG)
 	return s.saveLocked()
 }
 
@@ -173,7 +183,7 @@ func (s *Service) Diagnostics() Diagnostics {
 
 // SetupKWin authorizes this binary for fast KWin ScreenShot2 capture (Linux KDE).
 func (s *Service) SetupKWin() (string, error) {
-	path, err := fisher.SetupKWin()
+	path, err := fisher.SetupKWin(appIconPNG)
 	if err != nil {
 		return "", err
 	}
