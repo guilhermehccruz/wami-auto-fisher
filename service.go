@@ -72,8 +72,10 @@ func (s *Service) Startup() error {
 	s.cfg = fisher.DefaultConfig()
 
 	if b, err := os.ReadFile(s.path); err == nil {
-		var cf configFile
-		if json.Unmarshal(b, &cf) == nil && cf.Config.PollMs > 0 {
+		// Pre-fill with defaults so a config written before a field existed
+		// (e.g. idleTimeoutMs) keeps that field's default instead of 0.
+		cf := configFile{Config: fisher.DefaultConfig()}
+		if err := json.Unmarshal(b, &cf); err == nil {
 			s.cfg = cf.Config
 		}
 	}
