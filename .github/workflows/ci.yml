@@ -36,7 +36,8 @@ jobs:
 
       - name: gofmt
         run: |
-          unformatted="$(gofmt -l . )"
+          # Ignore the Wails scaffold under build/ (not our code, not gofmt'd).
+          unformatted="$(gofmt -l . | grep -v '^build/' || true)"
           if [ -n "$unformatted" ]; then
             echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
           fi
