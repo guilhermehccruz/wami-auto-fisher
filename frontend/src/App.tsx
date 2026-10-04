@@ -141,7 +141,6 @@ export default function App() {
                 <th>roi</th>
                 <th>white</th>
                 <th>blue</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +153,6 @@ export default function App() {
                     <td className="mono">{roiText(s.roi)}</td>
                     <td className="num">{m ? m.white.toFixed(2) : "—"}</td>
                     <td className="num">{m ? m.blue.toFixed(2) : "—"}</td>
-                    <td className="flag">{best ? "▶ detected" : ""}</td>
                   </tr>
                 );
               })}
