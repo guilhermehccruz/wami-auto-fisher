@@ -30,6 +30,7 @@ type Diagnostics = {
   displays: Display[] | null;
   configPath: string;
   platform: string;
+  version: string;
   error?: string;
 };
 
@@ -117,6 +118,8 @@ export default function App() {
             <>
               capture: <code>{diag.capturePath || "—"}</code>
               {diag.activeTitle && <> · focused: <code>{diag.activeTitle}</code></>}
+              {" · "}
+              <code>v{diag.version}</code>
             </>
           ) : (
             "loading…"

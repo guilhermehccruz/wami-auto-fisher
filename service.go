@@ -31,6 +31,7 @@ type Diagnostics struct {
 	Displays    []fisher.Display `json:"displays"`
 	ConfigPath  string           `json:"configPath"`
 	Platform    string           `json:"platform"`
+	Version     string           `json:"version"`
 	Error       string           `json:"error,omitempty"`
 }
 
@@ -161,7 +162,7 @@ func (s *Service) Status() fisher.Status {
 func (s *Service) Diagnostics() Diagnostics {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	d := Diagnostics{ConfigPath: s.path, Error: s.screenErr, Platform: runtime.GOOS}
+	d := Diagnostics{ConfigPath: s.path, Error: s.screenErr, Platform: runtime.GOOS, Version: version}
 	if s.screen != nil {
 		d.CapturePath = s.screen.Name()
 		d.ActiveTitle = s.screen.ActiveTitle()

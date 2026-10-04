@@ -504,7 +504,7 @@ control model:
 | **Stop button** | stop before the next injection | v1 |
 | **Start button** | begin watching | v1 |
 | **Idle auto-stop** | stop after `idleTimeoutMs` (default 10 s) with no prompt | v1 |
-| Single-instance lock | second launch refuses to run | v1 |
+| Single-instance lock | second launch exits and focuses the running window | v1 |
 | **Ambiguity guard** | ignore a poll when two ROIs are close in score | v1 |
 | **No-blind-press policy** | never press without a confident detection | v1 |
 | Capture-failure abort | all-black game region → stop with a banner, not blind presses | v1 |
@@ -531,7 +531,8 @@ service.go                   Wails-bound Service: config, runner, diagnostics, S
 main.go                      Wails bootstrap + embedded frontend/dist
 frontend/                    React + TS app (fixed spot list, telemetry, thresholds)
 frontend/bindings/           Wails-generated TS bindings (do not edit)
-.github/workflows/           ci.yml, release.yml (planned)
+.github/workflows/           ci.yml (vet/test/typecheck/build), release.yml
+                             (Linux + Windows binaries on every main push / tag)
 ```
 
 `frontend/src` layout (`api/` WailsApi + MockApi, `components/`,
@@ -637,7 +638,8 @@ capture-failure abort; telemetry; diagnostics; Wails shell; Linux + Windows buil
 | Windows capture — kbinani GDI + robotgo/win SendInput | ✅ compiles; runtime test pending |
 | Wails app (`main.go`, `service.go`) + React UI | ✅ builds (`wails3 build`, `-tags gtk3`), runs on Linux |
 | UI: fixed read-only spot list, live white/blue, Start/Stop, thresholds, idle auto-stop, Linux-only KWin setup | ✅ done |
-| Single-instance lock | ⏳ next |
+| Single-instance lock (Wails native) | ✅ done, verified |
+| CI + release workflows (`.github/workflows/`) | ✅ added |
 
 Build: `wails3 build` (the Linux task defaults to `EXTRA_TAGS=gtk3`), producing
 `bin/wami-auto-fisher`. Windows cross-build: `wails3 build GOOS=windows`.
