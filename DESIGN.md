@@ -43,9 +43,8 @@ then on, roughly once per second, a prompt box pops up over the fishing scene re
 
 *(The screenshots show the boxes reading `A/Q` and `Z/W` — presumably the game also
 accepts the AZERTY-style second key. This app standardizes on **WASD** and presses only
-the primary key. Actual pixel values come from the user's calibration, not from a
-shipped constant; see [§5](#5-calibration). Which spot carries which key is confirmed
-during calibration.)*
+the primary key. The pixel values are **fixed constants** shipped in the build and
+measured once by hand, not calibrated in the app; see [§5](#5-coordinates-fixed-calibrated-once-by-hand).)*
 
 Pressing the commanded key reduces the fish's stamina. A **wrong key** fails that fish
 and the game immediately throws **another random prompt**; letting the prompt time out
@@ -85,7 +84,8 @@ key.
   stamina tick; a wrong press loses the fish.
 - Cross-platform: **Windows 10** and **Kubuntu (KDE Plasma)** only, with the game
   running under **Steam / Proton**.
-- Dead-simple to use: calibrate once, press Start, walk away. The **game is always the
+- Dead-simple to use: the coordinates are fixed, so just press Start and walk away. The
+  **game is always the
   focused window** while fishing, so control during a run is via global hotkeys.
 - Ship as one binary per OS.
 
@@ -156,10 +156,10 @@ position already identifies the key.
 
 ### 4.2 Regions of interest (ROIs)
 
-Each spot owns a small rectangular **ROI** (default ~180×56 px at 1080p, tight around
-the prompt box). ROIs are captured relative to the **game window's client area**, so
-the window can move without invalidating calibration ([§7](#7-window-binding-and-coordinates)).
-At runtime the app captures the **union bounding box of all enabled ROIs once per
+Each spot owns a small rectangular **ROI** (fixed, tight around the prompt box). ROIs are
+expressed in the **target monitor's pixels** and are fixed constants ([§5](#5-coordinates-fixed-calibrated-once-by-hand));
+the app does not bind to or track the game window.
+At runtime the app captures the **union bounding box of the spots once per
 poll** and crops the four sub-regions — one capture call per tick, not four.
 
 ### 4.3 Classifier
@@ -190,10 +190,9 @@ If the margin fails (e.g. a banner or a bright animation touches two ROIs), the 
 ~30 Hz, the next frame almost always resolves cleanly; ignoring one frame costs
 nothing, a wrong key loses the fish.
 
-**Optional template mode.** For stubborn backgrounds, calibration can store a grayscale
-crop of each prompt and classify by normalized cross-correlation (NCC ≥ `templateThreshold`,
-default `0.80`). Pure Go, tiny templates, cheap. `brightBox` is the default; template
-mode is an escape hatch.
+**Optional template mode.** For stubborn backgrounds, a grayscale template per spot can
+be compiled into the build and matched by normalized cross-correlation. (Not used in the
+current build; the `brightBox` classifier is sufficient.)
 
 ### 4.4 Why not the obvious alternatives
 - **OCR the text** — heavier, needs a font model, and unnecessary: position ⇒ key.
@@ -212,27 +211,40 @@ mis-detection is visible as a number.
 
 ---
 
-## 5. Calibration
+## 5. Coordinates (fixed, calibrated once by hand)
 
-Calibration is how four rectangles and four keys become a profile. It runs once per
-resolution/layout.
+**There is no calibration in the app.** The four ROIs and their keys are fixed
+constants, measured once by the operator with a screen coordinate tool (KDE
+`kdotool getmouselocation`, reading the top-left and bottom-right corner of each
+prompt box) and then converted to the target monitor's local space. The app
+uses these exact values on **both Linux and Windows**; it never captures to
+calibrate, draws overlays, or asks the user to pick points.
 
-1. The app captures a screenshot of the game window (or full screen if the window
-   cannot be bound) and shows it scaled-to-fit in the calibration panel.
-2. The user draws a rectangle around each of the four prompt spots and assigns the
-   key it commands. The app defaults to the **`W`, `A`, `S`, `D`** mapping of
-   [§1.1](#11-what-the-game-does).
-3. The app stores each ROI in window-client coordinates plus the client-area size it
-   was measured at (for later resize scaling, [§7](#7-window-binding-and-coordinates)).
-4. The app optionally captures an **empty reference** of each ROI (a "no prompt"
-   snapshot) for `diffFrac`, and optionally a prompt **template** if the user wants
-   template mode.
-5. The user hits **Test**: the app runs the detector live and shows the debug view
-   while the game throws prompts, so the boxes and thresholds can be nudged before
-   trusting a run.
+The values in the current build (target-monitor pixels; origin at the primary
+monitor's top-left):
 
-A profile can hold more than one of these (e.g. one per window size or per OS), which
-is why "profile" rather than "the config" ([§9](#9-profiles-and-settings)).
+| Spot | Key | ROI `(x, y, w, h)` |
+|---|---|---|
+| S1 | `a` | `969, 581, 109, 42` |
+| S2 | `w` | `1102, 506, 111, 43` |
+| S3 | `d` | `1235, 580, 109, 43` |
+| S4 | `s` | `1102, 655, 109, 41` |
+
+The operator's source readings were global (Linux layout) coordinates
+`x 2889..3264`; subtracting the `1920` layout offset (the secondary monitor to
+the left) gives the local values above. Windows uses the same local values,
+which requires the game window parked at the primary monitor's top-left with the
+same size as when the readings were taken. If the window moves, the fixed
+coordinates no longer line up: **that is accepted** — the app is intentionally
+not self-calibrating.
+
+Consequences:
+- No screenshot/preview endpoint and no calibration UI. The app's only visual
+  feedback is the live `white/blue` readout per spot ([§4.5](#45-live-debug-view)),
+  which is enough to confirm the fixed boxes still frame the prompts.
+- If the game moves to a different monitor or is resized, the build must be
+  updated with new constants (or the window put back). There is no runtime
+  adjustment.
 
 ---
 
@@ -319,39 +331,24 @@ located (or captured) this way; that case is degraded, not supported
 
 ### 7.2 Coordinates
 
-ROIs are stored in **client-area pixels** plus the client size at calibration time:
-
-```jsonc
-"calibratedAt": { "w": 1920, "h": 1080 },
-"spots": [ { "roi": { "x": 840, "y": 580, "w": 180, "h": 56 } }, … ]
-```
-
-At runtime each ROI is scaled if the window was resized:
-
-```
-x' = roi.x * clientW / calibratedAt.w       (same for y, w, h)
-```
-
-then offset by the client-area origin. This assumes the game scales its canvas
-uniformly with the window, which is the norm for the HTML5 game; the **Test** view in
-[§5](#5-calibration) confirms it before a run.
-
-If the window cannot be found or bound, the app falls back to **absolute screen pixels**:
-the user keeps the window at a fixed place and picks ROIs
-against the screen. The profile records which mode it is in, and the UI says so.
+ROIs are **fixed target-monitor pixels** (origin at the target monitor's top-left),
+compiled into the build as constants ([§5](#5-coordinates-fixed-calibrated-once-by-hand)).
+There is no window binding, no client-area scaling and no coordinate picker: the game is
+expected at the position the constants were measured against.
 
 On X11/XWayland there are **two coordinate systems** and mixing them shifts every ROI
 by a whole monitor: the pointer query returns **root-window** coordinates (origin at the
 left-most monitor), while per-monitor Xinerama geometry can have **negative** origins
 for a monitor left of / above the primary. Convert once at the boundary
-(`root = xinerama − unionMin`) and express everything in a single canonical space —
-either the primary monitor's own pixels (origin `0,0`) or window-client pixels.
+(`root = xinerama − unionMin`) and express everything in the target monitor's own pixels
+(origin `0,0`). The operator's hand readings were global and were converted by
+subtracting the `1920` layout offset.
 
 ### 7.3 DPI on Windows
 
-The app is per-monitor DPI aware. Window-client coordinates are physical pixels, and
-`kbinani/screenshot` captures physical pixels, so ROI and capture space agree. Multi-
-monitor with mixed scaling must be verified in Phase 0 **[unproven]**.
+The app is per-monitor DPI aware. ROIs are physical pixels and `kbinani/screenshot`
+captures physical pixels, so ROI and capture space agree. Mixed-DPI multi-monitor is
+still to verify.
 
 ---
 
@@ -417,54 +414,27 @@ atomic write (temp + `fsync` + rename); unknown-field preservation on round-trip
 `schemaVersion` gate; a single-instance lock; structured rotating logs in the OS state
 dir. This discipline is defined once and applies to every file the app writes.
 
-### 9.1 Fishing profile schema
+### 9.1 Configuration schema
+
+Only the detector tunables and the run failsafe are user-editable. The spots are fixed
+constants compiled into the build ([§5](#5-coordinates-fixed-calibrated-once-by-hand)) and
+are shown read-only. The machine config file is intentionally small:
 
 ```jsonc
 {
-  "schemaVersion": 1,
-  "name": "WAMI 1920x1080",
-  "window": {
-    "title": "Wizard and Minion Idle",
-    "bind": true,                 // false → use absolute screen coords
-    "calibratedAt": { "w": 1920, "h": 1080 }
-  },
-  "display": { "width": 5360, "height": 1440 },   // snapshot for the portable warning
-  "detection": {
-    "mode": "brightBox",          // "brightBox" | "template"
+  "config": {
     "pollMs": 40,
     "whiteThreshold": 0.35,
     "clearThreshold": 0.15,
     "margin": 1.25,
-    "templateThreshold": 0.80,
     "refractoryMs": 100,
     "retryMs": 250
-  },
-  "action": {
-    "kind": "key",                // "key" | "click"
-    "holdMs": 40                  // key down→up duration (click mode: same meaning)
-  },
-  "spots": [
-    { "id": "s_a", "key": "a", "enabled": true,
-      "roi": { "x": 840,  "y": 590, "w": 180, "h": 56 },
-      "emptyRef": "refs/s_a_empty.png", "template": "" },
-    { "id": "s_w", "key": "w", "enabled": true,
-      "roi": { "x": 1060, "y": 480, "w": 180, "h": 56 },
-      "emptyRef": "refs/s_w_empty.png", "template": "" },
-    { "id": "s_d", "key": "d", "enabled": true,
-      "roi": { "x": 1280, "y": 560, "w": 180, "h": 56 },
-      "emptyRef": "refs/s_d_empty.png", "template": "" },
-    { "id": "s_s", "key": "s", "enabled": true,
-      "roi": { "x": 1150, "y": 700, "w": 180, "h": 56 },
-      "emptyRef": "refs/s_s_empty.png", "template": "" }
-  ],
-  "failsafe": { "maxRuntimeSec": 3600 }
+  }
 }
 ```
 
-**The `roi` values above are illustrative only** — they are *not* shipped defaults. Real
-values come from calibration and depend on the window layout. Shipping fake constants
-would be worse than shipping none, so a new profile starts with no spots and the
-calibration wizard.
+The spots are not persisted or editable; changing them means changing the constants in
+`service.go` (`fixedSpots`) and rebuilding.
 
 ### 9.2 App settings
 
@@ -496,15 +466,11 @@ A single dense window (the project's dark Tailwind vocabulary).
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Profiles sidebar** — select, rename, duplicate, delete, plus a New profile that
-  opens calibration.
-- **Spot list** — the four (or fewer) spots with ROI, key, enable switch and the live
-  score from the debug view, so mis-detection is obvious.
-- **Calibration** — screenshot + rectangle drawing + key assignment ([§5](#5-calibration)).
-- **Test** — runs the detector and shows live scores/verdicts with the game visible;
-  **no keys are injected** in Test mode, so it is always safe.
-- **Bottom bar** — Start/Stop, action selector (key/click), poll and threshold, live
-  telemetry (current detected spot, press count, elapsed).
+- **Spot list (read-only)** — the four fixed spots with ROI, key and the live score, so
+  mis-detection is obvious. There is no calibration, no screenshot preview and no
+  ROI editing in the app ([§5](#5-coordinates-fixed-calibrated-once-by-hand)).
+- **Bottom bar** — Start/Stop, detection thresholds and poll, live telemetry (current
+  detected spot, press count, elapsed).
 
 Interaction rules: no native `<select>`, tooltips + `aria-label` on
 icon buttons, `Esc` closes overlays, UI locked while running except Stop/Panic, focus
@@ -519,8 +485,8 @@ control model:
 - **Global hotkeys are the only control surface during a run** — `F8` Start/Stop,
   `F9` Pause/Resume, `Ctrl+Shift+F12` Panic. They must work while the game has focus
   (the portal / `XGrabKey` / `RegisterHotKey` layer).
-- The **app window is for setup**: calibrate, Test, pick profile, set thresholds. The
-  user configures, presses `F8`, then clicks into the game.
+- The **app window is for setup**: set thresholds, press Start. The user configures,
+  presses `F8`, then clicks into the game.
 - A full UI is not needed over the game. If live reassurance is wanted, a tiny
   always-on-top **status strip** (current detected spot, press count, `F8` to stop) is a
   Phase 2 option; it is not required for v1.
@@ -561,23 +527,15 @@ go.mod                       module wami-auto-fisher
 main.go                      Wails bootstrap; single-instance lock; hotkey registration;
                              service bindings; startup/shutdown
 build/                       Wails config + appicon
-internal/model/              Profile, Spot, Roi, Detection, Action; validation; JSON with
-                             unknown-field preservation; schema migrations
-internal/vision/             Source interface; classify.go (whiteFrac/blueFrac/NCC);
-                             source_windows.go (kbinani/screenshot); source_linux.go
-                             (kbinani/screenshot; screencast.go reserved for Phase 2)
-internal/window/             window locate + client rect: windows.go / x11_linux.go;
-                             scaling to absolute coords
-internal/engine/             poll loop, per-spot armed/retry state, stop/panic, progress
-internal/input/              Driver, x11/libei/win backends, FakeDriver
-internal/cursor/             CursorPos query path (only for click mode + window picking)
-internal/hotkey/             portal / XGrabKey / RegisterHotKey sources
-internal/store/              paths, atomic writes, settings, single-instance lock
-internal/logging/            rotating file log + tail for diagnostics
-internal/service/            the operation surface the UI binds to (no Wails import)
-frontend/                    React + TS app (sidebar, spots, calibration, debug, bottom bar)
+internal/fisher/             classifier + Capture/Input interfaces + detect loop:
+                             fisher.go, capture_linux.go (KWin ScreenShot2 + portal
+                             fallback + XTEST), capture_windows.go (kbinani GDI +
+                             robotgo/win SendInput), capture_other.go
+service.go                   Wails-bound Service: config, runner, diagnostics, SetupKWin
+main.go                      Wails bootstrap + embedded frontend/dist
+frontend/                    React + TS app (fixed spot list, telemetry, thresholds)
 frontend/bindings/           Wails-generated TS bindings (do not edit)
-.github/workflows/           ci.yml, release.yml
+.github/workflows/           ci.yml, release.yml (planned)
 ```
 
 `frontend/src` layout (`api/` WailsApi + MockApi, `components/`,
@@ -591,29 +549,22 @@ backends: the engine depends only on the interface, and a `FakeDriver` implement
 tests. Keep that interface stable — it is what makes the engine deterministic to test and
 the backend swappable without touching the loop.
 
-### 12.2 UI ↔ Go bindings (sketch)
+### 12.2 UI ↔ Go bindings
 
 ```go
-type Service struct{ /* engine, classifier, window, store, hotkeys */ }
-
-func (s *Service) ListProfiles() ([]ProfileSummary, error)
-func (s *Service) LoadProfile(id string) (*model.Profile, error)
-func (s *Service) SaveProfile(p *model.Profile) error
-func (s *Service) CreateProfile(name string) (string, error)
-func (s *Service) DeleteProfile(id string) error
-
-func (s *Service) CalibrationShot() ([]byte, error)   // PNG of the game window/screen
-func (s *Service) ProbeSpots(p *model.Profile) ([]SpotScore, error)  // Test mode
-func (s *Service) Start(profileID string) error
-func (s *Service) Stop() error
-func (s *Service) Panic() error
-func (s *Service) Status() Progress
-func (s *Service) Capabilities() Capabilities         // capture backend, window binding, input
+// service.go — the surface bound to the frontend
+func (s *Service) GetSpots() []fisher.Spot        // fixed, read-only
+func (s *Service) GetConfig() fisher.Config
+func (s *Service) SetConfig(cfg fisher.Config) error
+func (s *Service) Start() error
+func (s *Service) Stop()
+func (s *Service) Status() fisher.Status
 func (s *Service) Diagnostics() Diagnostics
+func (s *Service) SetupKWin() (string, error)     // KDE fast-capture authorization
 ```
 
-Events pushed to the UI: `spot:scores` (debug/telemetry), `run:progress`, `run:state`,
-`profiles:changed`, `capabilities:changed`. `spot:scores` coalesces at ~10 Hz.
+Events pushed to the UI: `status` (`fisher.Status`, emitted per poll), carrying the
+per-spot `white/blue`, the detected spot, press count and elapsed.
 
 ---
 
@@ -621,26 +572,24 @@ Events pushed to the UI: `spot:scores` (debug/telemetry), `run:progress`, `run:s
 
 | Layer | Approach |
 |---|---|
-| `internal/vision` | golden-image tests: synthetic frames with a white box over green/blue backgrounds classify correctly; `whiteFrac` thresholds; ambiguity margin rejects two-box frames |
-| `internal/window` | ROI scaling math (calibrated size → current size), origin translation, absolute/window-relative modes |
-| `internal/engine` | `FakeCapture` (a scripted frame sequence) + `FakeInput`/`FakeDriver`: assert exactly one key tap per prompt appearance, re-arm after clear, retry while persisting, correct key per spot, no tap on ambiguous frames, stop before the next tap, `ReleaseAll` on every exit path |
-| `internal/store` | atomic write, field preservation, single-instance lock |
-| UI | `vitest` for score-chip rendering and calibration state; manual pass for screen-rectangle capture |
+| `internal/fisher` classifier | golden-image tests: synthetic frames with a white box over green/blue backgrounds classify correctly; `whiteFrac` thresholds; ambiguity margin rejects two-box frames |
+| `internal/fisher` loop | `FakeCapture` (a scripted frame sequence) + `FakeInput`: exactly one key tap per prompt appearance, re-arm after clear, retry while persisting, correct key per spot, no tap on ambiguous frames |
+| UI | manual pass (fixed spot list, live scores, Start/Stop) |
 
 The engine test is the one that matters: feed frames
 `[]→A→A→clear→D→D→clear` and assert the taps are `[A, D]`, with none on the ambiguous
 frame.
 
 ### Manual release matrix
-1. **Windows 10, borderless windowed**: calibrate, run, verify prompt keys land and
-   the debugging view reads scores; verify `RegisterHotKey` stops it while the game is
-   focused; launch a second instance → refused.
-2. **Linux KDE Wayland, Proton/XWayland**: same; verify X11 capture of the Proton
-   window and XTEST key injection; verify hotkeys via the portal.
+1. **Windows 10, borderless windowed**: park the game at the fixed position, run, verify
+   the prompt keys land and the live view reads scores; verify `RegisterHotKey` stops it
+   while the game is focused; launch a second instance → refused.
+2. **Linux KDE Wayland, Proton/XWayland**: same; verify KWin capture + XTEST key
+   injection; verify hotkeys via the portal.
 3. **Linux X11 session**: same, X11-only.
-4. **Regression**: resize the game window after calibrating → ROIs still line up
-   (§7.2); exclusive-fullscreen → capture black → aborts with the banner, no blind
-   presses.
+4. **Regression**: move/resize the game window → the fixed ROIs no longer line up
+   (expected; the coordinates are constants, not calibrated); exclusive-fullscreen →
+   capture black → aborts with the banner, no blind presses.
 
 ---
 
@@ -679,10 +628,9 @@ The original six questions:
 6. **Spot ⇒ key mapping.** Which spot carries `W`, `A`, `S`, `D`, and does it rotate?
 
 ### Phase 1 — MVP
-Profiles CRUD + calibration wizard + Test/debug view; 4 spots; `brightBox` classifier;
-key action with click fallback; poll loop with armed/retry; Start/Stop/Panic + global
-hotkeys; max runtime; single-instance lock; capture-failure abort; telemetry;
-diagnostics; Wails shell; Linux + Windows builds.
+Fixed coordinates (no calibration); `brightBox` classifier; key action; poll loop with
+armed/retry; Start/Stop + global hotkeys; max runtime; single-instance lock;
+capture-failure abort; telemetry; diagnostics; Wails shell; Linux + Windows builds.
 
 **Status (in progress).** A first end-to-end shell exists:
 
@@ -692,8 +640,8 @@ diagnostics; Wails shell; Linux + Windows builds.
 | Linux capture — KWin ScreenShot2 (fast) + portal fallback; XTEST input | ✅ done, validated |
 | Windows capture — kbinani GDI + robotgo/win SendInput | ✅ compiles; runtime test pending |
 | Wails app (`main.go`, `service.go`) + React UI | ✅ builds (`wails3 build`, `-tags gtk3`), runs on Linux |
-| UI: spot table (editable ROI/key), live white/blue, Start/Stop, threshold, KWin authorize, capture preview overlay | ✅ first cut |
-| Global hotkeys, profiles, calibration wizard, max runtime, single-instance, telemetry events | ⏳ next |
+| UI: fixed read-only spot list, live white/blue, Start/Stop, thresholds, KWin authorize | ✅ first cut, no calibration |
+| Global hotkeys, max runtime, single-instance lock, pause/panic | ⏳ next |
 
 Build: `wails3 build` (the Linux task defaults to `EXTRA_TAGS=gtk3`), producing
 `bin/wami-auto-fisher`. Windows cross-build: `wails3 build GOOS=windows`.
@@ -715,10 +663,10 @@ and Kubuntu.
 |---|---|---|
 | Proton game capture returns black (exclusive fullscreen) | no detection | require borderless windowed; detect all-black and abort; README + debug view make it obvious |
 | Native-Wayland game window unsupported | no detection on a Wayland session without XWayland | target is Proton (XWayland); Phase 2 ScreenCast backend; document |
-| Window title/canvas geometry differs or the game rescales oddly | ROIs miss | calibration `Test` view; ROI scaling; window-relative coords |
+| Window title/canvas geometry differs or the game rescales oddly | fixed ROIs miss | the coordinates are constants; put the window back, or update the constants and rebuild. Live scores make a miss obvious. |
 | Detection false positive on bright/white UI near an ROI | wrong key → fish lost | tight ROIs, blue-border component, ambiguity margin, never-guess policy |
 | Mixed-DPI multi-monitor | ROIs off by a scale factor | Phase 0 (items 1 and 5); capture and ROIs both in physical px; diagnostics show geometry |
-| Steam overlay / input remapping intercepts keys | key does not land | README: disable overlay/key remapping for WAMI; Test mode verifies |
+| Steam overlay / input remapping intercepts keys | key does not land | README: disable overlay/key remapping for WAMI; the live view verifies detection |
 | robotgo master pin regresses | build/runtime breakage | exact pseudo-version pinned; input behind `Driver` |
 | Anti-cheat / platform rules | account risk | single-player idle game, dev tolerant; README disclaimer |
 
@@ -746,19 +694,19 @@ and Kubuntu.
 
 ## Appendix A — Prompt spot reference
 
-Approximate spot locations observed in the 1080p screenshots (illustrative; calibrate
-for real values):
+The shipped fixed ROIs (target-monitor pixels, origin at the primary monitor's top-left;
+these are the current build's constants, see [§5](#5-coordinates-fixed-calibrated-once-by-hand)):
 
-| Spot | Prompt (primary key) | Key | Approx center (1080p) | Background |
+| Spot | Prompt (primary key) | Key | ROI `(x, y, w, h)` | Background |
 |---|---|---|---|---|
-| S1 | `Click or Press A` | `a` | ~(1116, 698) | water (blue) |
-| S2 | `Click or Press W` | `w` | ~(1253, 604) | trees (green) |
-| S3 | `Click or Press D` | `d` | ~(1373, 683) | trees/grass (green) |
-| S4 | `Click or Press S` | `s` | ~(1242, 800) | water/shorts (blue) |
+| S1 | `Click or Press A` | `a` | `969, 581, 109, 42` | water (blue) |
+| S2 | `Click or Press W` | `w` | `1102, 506, 111, 43` | trees (green) |
+| S3 | `Click or Press D` | `d` | `1235, 580, 109, 43` | trees/grass (green) |
+| S4 | `Click or Press S` | `s` | `1102, 655, 109, 41` | water/shorts (blue) |
 
-Each prompt is a near-white box with a double blue border, ~180×56 px at 1080p. The
-box is the only near-white, low-saturation object at those positions, which is what
-makes `whiteFrac` a sufficient discriminator.
+Each prompt is a near-white box with a double blue border (~110×43 px here). The box is
+the only near-white, low-saturation object at those positions, which is what makes
+`whiteFrac` a sufficient discriminator.
 
 ## Appendix B — Platform notes worth not rediscovering
 

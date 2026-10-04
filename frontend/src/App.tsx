@@ -30,7 +30,6 @@ type Diagnostics = {
   configPath: string;
   error?: string;
 };
-type Preview = { png: string; w: number; h: number };
 
 const emptyStatus: Status = {
   running: false,
@@ -45,12 +44,13 @@ const emptyStatus: Status = {
 const call = <T,>(method: string, ...args: unknown[]) =>
   Call.ByName(`main.Service.${method}`, ...args) as Promise<T>;
 
+const roiText = (r: Rect) => `${r.x},${r.y} ${r.w}×${r.h}`;
+
 export default function App() {
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
   const [cfg, setCfg] = useState<Config | null>(null);
   const [status, setStatus] = useState<Status>(emptyStatus);
-  const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const offRef = useRef<(() => void) | null>(null);
@@ -72,23 +72,9 @@ export default function App() {
     return () => offRef.current?.();
   }, [reload]);
 
-  const saveSpots = async (next: Spot[]) => {
-    setSpots(next);
-    await call("SetSpots", next);
-  };
-
   const saveCfg = async (next: Config) => {
     setCfg(next);
     await call("SetConfig", next);
-  };
-
-  const patchSpot = (i: number, patch: Partial<Spot>) => {
-    const next = spots.map((s, j) => (j === i ? { ...s, ...patch } : s));
-    saveSpots(next).catch((e) => setNote(String(e)));
-  };
-  const patchRoi = (i: number, patch: Partial<Rect>) => {
-    const next = spots.map((s, j) => (j === i ? { ...s, roi: { ...s.roi, ...patch } } : s));
-    saveSpots(next).catch((e) => setNote(String(e)));
   };
 
   const start = async () => {
@@ -117,20 +103,7 @@ export default function App() {
     }
   };
 
-  const capture = async () => {
-    setBusy(true);
-    try {
-      setPreview(await call<Preview>("CapturePreview"));
-    } catch (e) {
-      setNote(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const scoreFor = (id: string): Metrics | undefined =>
-    status.spots?.find((m) => m.spot.id === id);
-
+  const scoreFor = (id: string): Metrics | undefined => status.spots?.find((m) => m.spot.id === id);
   const backendDown = !!diag?.error;
 
   return (
@@ -154,83 +127,37 @@ export default function App() {
 
       <div className="grid">
         <section className="panel">
-          <div className="row between">
-            <h2>Prompt spots</h2>
-            <button onClick={capture} disabled={busy || backendDown}>
-              Capture screenshot
-            </button>
-          </div>
-
+          <h2>Prompt spots (fixed)</h2>
+          <p className="hint">
+            Coordinates are fixed; the app does not calibrate. The game window must be at the same
+            position used when the coordinates were recorded.
+          </p>
           <table className="spots">
             <thead>
               <tr>
                 <th>key</th>
-                <th>x</th>
-                <th>y</th>
-                <th>w</th>
-                <th>h</th>
+                <th>roi</th>
                 <th>white</th>
                 <th>blue</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {spots.map((s, i) => {
+              {spots.map((s) => {
                 const m = scoreFor(s.id);
                 const best = status.best >= 0 && status.spots?.[status.best]?.spot.id === s.id;
                 return (
                   <tr key={s.id} className={best ? "best" : ""}>
-                    <td>
-                      <select value={s.key} onChange={(e) => patchSpot(i, { key: e.target.value })}>
-                        {["a", "w", "s", "d"].map((k) => (
-                          <option key={k} value={k}>
-                            {k}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    {(["x", "y", "w", "h"] as const).map((f) => (
-                      <td key={f}>
-                        <input
-                          type="number"
-                          value={s.roi[f]}
-                          onChange={(e) => patchRoi(i, { [f]: Number(e.target.value) } as Partial<Rect>)}
-                        />
-                      </td>
-                    ))}
+                    <td className="key">{s.key}</td>
+                    <td className="mono">{roiText(s.roi)}</td>
                     <td className="num">{m ? m.white.toFixed(2) : "—"}</td>
                     <td className="num">{m ? m.blue.toFixed(2) : "—"}</td>
+                    <td className="flag">{best ? "▶ detected" : ""}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-
-          <details>
-            <summary>Calibration preview</summary>
-            {preview ? (
-              <div className="preview">
-                <img src={`data:image/png;base64,${preview.png}`} alt="target monitor" />
-                {spots.map((s) => (
-                  <div
-                    key={s.id}
-                    className="roi"
-                    style={{
-                      left: `${(s.roi.x / preview.w) * 100}%`,
-                      top: `${(s.roi.y / preview.h) * 100}%`,
-                      width: `${(s.roi.w / preview.w) * 100}%`,
-                      height: `${(s.roi.h / preview.h) * 100}%`,
-                    }}
-                  >
-                    <span>{s.key}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="hint">
-                Capture a screenshot, then adjust x/y/w/h so each box frames a prompt.
-              </p>
-            )}
-          </details>
         </section>
 
         <section className="panel">
@@ -309,8 +236,8 @@ export default function App() {
             Authorize fast KWin capture (KDE Wayland)
           </button>
           <p className="hint">
-            Fast region capture on KDE requires this once per binary path. Without it the app
-            falls back to the slow portal.
+            Fast region capture on KDE requires this once per binary path. Without it the app falls
+            back to the slow portal.
           </p>
         </section>
       </div>

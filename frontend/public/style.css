@@ -140,6 +140,10 @@ select { width: 52px; }
 
 .hint { color: var(--muted); font-size: 12px; }
 
+table.spots .mono { font-family: ui-monospace, monospace; color: #cbd5e1; }
+table.spots .key { text-transform: uppercase; font-weight: 600; }
+table.spots .flag { color: var(--ok); font-size: 11px; text-align: right; }
+
 .preview { position: relative; margin-top: 8px; line-height: 0; }
 .preview img { width: 100%; border-radius: 6px; border: 1px solid var(--border); }
 .preview .roi {

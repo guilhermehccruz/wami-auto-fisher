@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"image/png"
 	"os"
 	"path/filepath"
 	"sync"
@@ -22,7 +19,6 @@ type Service struct {
 	mu        sync.Mutex
 	screen    *fisher.Screen
 	runner    *fisher.Runner
-	spots     []fisher.Spot
 	cfg       fisher.Config
 	path      string
 	screenErr string
@@ -37,7 +33,6 @@ type Diagnostics struct {
 }
 
 type configFile struct {
-	Spots  []fisher.Spot `json:"spots"`
 	Config fisher.Config `json:"config"`
 }
 
@@ -45,12 +40,16 @@ func NewService() *Service { return &Service{} }
 
 func (s *Service) SetApp(app *application.App) { s.app = app }
 
-func defaultSpots() []fisher.Spot {
+// fixedSpots are the coordinates supplied by the operator, converted to the
+// target monitor's local space (Linux global x minus the 1920 layout offset;
+// Windows uses the same values with the game window at the monitor's top-left).
+// The app does not calibrate: these are used as-is on both platforms.
+func fixedSpots() []fisher.Spot {
 	return []fisher.Spot{
-		{ID: "s_a", Key: "a"},
-		{ID: "s_w", Key: "w"},
-		{ID: "s_d", Key: "d"},
-		{ID: "s_s", Key: "s"},
+		{ID: "s_a", Key: "a", ROI: fisher.Rect{X: 969, Y: 581, W: 109, H: 42}},
+		{ID: "s_w", Key: "w", ROI: fisher.Rect{X: 1102, Y: 506, W: 111, H: 43}},
+		{ID: "s_s", Key: "s", ROI: fisher.Rect{X: 1102, Y: 655, W: 109, H: 41}},
+		{ID: "s_d", Key: "d", ROI: fisher.Rect{X: 1235, Y: 580, W: 109, H: 43}},
 	}
 }
 
@@ -69,17 +68,11 @@ func (s *Service) Startup() error {
 	}
 	s.path = filepath.Join(base, "config.json")
 	s.cfg = fisher.DefaultConfig()
-	s.spots = defaultSpots()
 
 	if b, err := os.ReadFile(s.path); err == nil {
 		var cf configFile
-		if json.Unmarshal(b, &cf) == nil {
-			if len(cf.Spots) > 0 {
-				s.spots = cf.Spots
-			}
-			if cf.Config.PollMs > 0 {
-				s.cfg = cf.Config
-			}
+		if json.Unmarshal(b, &cf) == nil && cf.Config.PollMs > 0 {
+			s.cfg = cf.Config
 		}
 	}
 
@@ -88,7 +81,8 @@ func (s *Service) Startup() error {
 		s.screenErr = err.Error()
 	} else {
 		s.screen = screen
-		s.runner = fisher.NewRunner(screen, screen, s.spots, s.cfg, func(st fisher.Status) {
+		spots := fixedSpots()
+		s.runner = fisher.NewRunner(screen, screen, spots, s.cfg, func(st fisher.Status) {
 			if s.app != nil {
 				s.app.Event.Emit("status", st)
 			}
@@ -98,7 +92,7 @@ func (s *Service) Startup() error {
 }
 
 func (s *Service) saveLocked() error {
-	b, err := json.MarshalIndent(configFile{Spots: s.spots, Config: s.cfg}, "", "  ")
+	b, err := json.MarshalIndent(configFile{Config: s.cfg}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -106,23 +100,7 @@ func (s *Service) saveLocked() error {
 	return os.WriteFile(s.path, b, 0o644)
 }
 
-// --- config / spots ---------------------------------------------------------
-
-func (s *Service) GetSpots() []fisher.Spot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]fisher.Spot(nil), s.spots...)
-}
-
-func (s *Service) SetSpots(spots []fisher.Spot) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.spots = spots
-	if s.runner != nil {
-		s.runner.SetSpots(spots, s.cfg)
-	}
-	return s.saveLocked()
-}
+func (s *Service) GetSpots() []fisher.Spot { return fixedSpots() }
 
 func (s *Service) GetConfig() fisher.Config {
 	s.mu.Lock()
@@ -135,7 +113,7 @@ func (s *Service) SetConfig(cfg fisher.Config) error {
 	defer s.mu.Unlock()
 	s.cfg = cfg
 	if s.runner != nil {
-		s.runner.SetSpots(s.spots, cfg)
+		s.runner.SetSpots(fixedSpots(), cfg)
 	}
 	return s.saveLocked()
 }
@@ -145,12 +123,10 @@ func (s *Service) SetConfig(cfg fisher.Config) error {
 func (s *Service) Start() error {
 	s.mu.Lock()
 	r := s.runner
+	errMsg := s.screenErr
 	s.mu.Unlock()
 	if r == nil {
-		return errors.New("capture backend unavailable: " + s.screenErr)
-	}
-	if len(s.GetSpots()) == 0 {
-		return errors.New("configure at least one spot first")
+		return errors.New("capture backend unavailable: " + errMsg)
 	}
 	r.Start()
 	return nil
@@ -168,14 +144,15 @@ func (s *Service) Stop() {
 func (s *Service) Status() fisher.Status {
 	s.mu.Lock()
 	r := s.runner
+	errMsg := s.screenErr
 	s.mu.Unlock()
 	if r == nil {
-		return fisher.Status{Error: s.screenErr}
+		return fisher.Status{Error: errMsg}
 	}
 	return r.Snapshot()
 }
 
-// --- diagnostics / calibration ---------------------------------------------
+// --- diagnostics ------------------------------------------------------------
 
 func (s *Service) Diagnostics() Diagnostics {
 	s.mu.Lock()
@@ -195,59 +172,16 @@ func (s *Service) SetupKWin() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Re-open the screen so the new capture path is picked up.
 	if screen, err := fisher.OpenScreen(-1); err == nil {
 		s.mu.Lock()
 		s.screen = screen
-		if s.runner != nil {
-			s.runner = fisher.NewRunner(screen, screen, s.spots, s.cfg, func(st fisher.Status) {
-				if s.app != nil {
-					s.app.Event.Emit("status", st)
-				}
-			})
-		}
+		s.screenErr = ""
+		s.runner = fisher.NewRunner(screen, screen, fixedSpots(), s.cfg, func(st fisher.Status) {
+			if s.app != nil {
+				s.app.Event.Emit("status", st)
+			}
+		})
 		s.mu.Unlock()
 	}
 	return path, nil
-}
-
-// Preview is a calibration screenshot plus its pixel size.
-type Preview struct {
-	PNG string `json:"png"`
-	W   int    `json:"w"`
-	H   int    `json:"h"`
-}
-
-// CapturePreview returns a base64 PNG of the target monitor, for calibration.
-func (s *Service) CapturePreview() (Preview, error) {
-	s.mu.Lock()
-	sc := s.screen
-	s.mu.Unlock()
-	if sc == nil {
-		return Preview{}, errors.New("capture backend unavailable: " + s.screenErr)
-	}
-	img, err := sc.Grab()
-	if err != nil {
-		return Preview{}, err
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return Preview{}, err
-	}
-	return Preview{
-		PNG: base64.StdEncoding.EncodeToString(buf.Bytes()),
-		W:   img.Bounds().Dx(),
-		H:   img.Bounds().Dy(),
-	}, nil
-}
-
-// Cursor returns the pointer position in target-monitor coordinates.
-func (s *Service) Cursor() (int, int) {
-	s.mu.Lock()
-	sc := s.screen
-	s.mu.Unlock()
-	if sc == nil {
-		return 0, 0
-	}
-	return sc.CursorPos()
 }
